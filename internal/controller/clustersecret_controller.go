@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
@@ -188,32 +189,63 @@ func (r *ClusterSecretReconciler) applySecrets(ctx context.Context, clusterSecre
 }
 
 func (r *ClusterSecretReconciler) getClusterSecretNamespaces(ctx context.Context, clusterSecret *k8soperatorsv1alpha1.ClusterSecret) ([]string, error) {
-	selector, err := metav1.LabelSelectorAsSelector(clusterSecret.Spec.Namespaces.Selector)
+	includeLabelSelector, err := metav1.LabelSelectorAsSelector(clusterSecret.Spec.Namespaces.Include.Selector)
 	if err != nil {
 		return nil, err
+	}
+	excludeLabelSelector, err := metav1.LabelSelectorAsSelector(clusterSecret.Spec.Namespaces.Exclude.Selector)
+	if err != nil {
+		return nil, err
+	}
+
+	includeRegexp, err := regexp.Compile(clusterSecret.Spec.Namespaces.Include.Regexp)
+	if err != nil {
+		return nil, err
+	}
+	excludeRegexp, err := regexp.Compile(clusterSecret.Spec.Namespaces.Exclude.Regexp)
+	if err != nil {
+		return nil, err
+	}
+
+	includedNames := make(map[string]struct{})
+	for _, name := range clusterSecret.Spec.Namespaces.Include.Names {
+		includedNames[name] = struct{}{}
+	}
+	excludedNames := make(map[string]struct{})
+	for _, name := range clusterSecret.Spec.Namespaces.Exclude.Names {
+		excludedNames[name] = struct{}{}
 	}
 
 	namespaceList := &corev1.NamespaceList{}
-	err = r.List(ctx, namespaceList, client.MatchingLabelsSelector{Selector: selector})
+	err = r.List(ctx, namespaceList)
 	if err != nil {
 		return nil, err
 	}
 
-	excludedNamespaces := make(map[string]struct{})
-	for _, namespace := range clusterSecret.Spec.Namespaces.Exclude {
-		excludedNamespaces[namespace] = struct{}{}
-	}
-
-	var namespaces []string
+	var namespaceNames []string
 
 	for _, namespace := range namespaceList.Items {
-		_, excluded := excludedNamespaces[namespace.Name]
-		if !excluded {
-			namespaces = append(namespaces, namespace.Name)
+		namespaceLabels := labels.Set(namespace.GetLabels())
+		namespaceName := namespace.GetName()
+
+		if !includeLabelSelector.Matches(namespaceLabels) || excludeLabelSelector.Matches(namespaceLabels) {
+			continue
 		}
+
+		if !includeRegexp.MatchString(namespaceName) || excludeRegexp.MatchString(namespaceName) {
+			continue
+		}
+
+		_, included := includedNames[namespaceName]
+		_, excluded := excludedNames[namespaceName]
+		if !included || excluded {
+			continue
+		}
+
+		namespaceNames = append(namespaceNames, namespaceName)
 	}
 
-	return namespaces, nil
+	return namespaceNames, nil
 }
 
 func (r *ClusterSecretReconciler) updateSecret(clusterSecret *k8soperatorsv1alpha1.ClusterSecret, secret *corev1.Secret) error {

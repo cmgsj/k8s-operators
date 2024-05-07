@@ -14,14 +14,20 @@ type ClusterSecretSpec struct {
 }
 
 type ClusterSecretNamespaces struct {
+	Include ClusterSecretNamespaceRule `json:"include,omitempty" yaml:"include,omitempty"`
+	Exclude ClusterSecretNamespaceRule `json:"exclude,omitempty" yaml:"exclude,omitempty"`
+}
+
+type ClusterSecretNamespaceRule struct {
 	Selector *metav1.LabelSelector `json:"selector,omitempty" yaml:"selector,omitempty"`
-	Exclude  []string              `json:"exclude,omitempty" yaml:"exclude,omitempty"`
+	Regexp   string                `json:"regexp,omitempty" yaml:"regexp,omitempty"`
+	Names    []string              `json:"exclude,omitempty" yaml:"exclude,omitempty"`
 }
 
 // ClusterSecretStatus defines the observed state of ClusterSecret
 type ClusterSecretStatus struct {
-	Namespaces []string           `json:"namespaces,omitempty" yaml:"namespaces,omitempty"`
-	Conditions []metav1.Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+	Namespaces []string            `json:"namespaces,omitempty" yaml:"namespaces,omitempty"`
+	Conditions []*metav1.Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
 }
 
 //+kubebuilder:object:root=true
