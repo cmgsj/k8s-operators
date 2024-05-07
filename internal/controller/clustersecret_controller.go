@@ -188,41 +188,27 @@ func (r *ClusterSecretReconciler) applySecrets(ctx context.Context, clusterSecre
 	return namespaces, nil
 }
 
+func (r *ClusterSecretReconciler) updateSecret(clusterSecret *k8soperatorsv1alpha1.ClusterSecret, secret *corev1.Secret) error {
+	secret.Type = clusterSecret.Spec.Type
+	secret.Immutable = clusterSecret.Spec.Immutable
+	secret.Data = clusterSecret.Spec.Data
+
+	if metav1.GetControllerOf(secret) == nil {
+		return controllerutil.SetControllerReference(clusterSecret, secret, r.Scheme)
+	}
+
+	return nil
+}
+
 func (r *ClusterSecretReconciler) getClusterSecretNamespaces(ctx context.Context, clusterSecret *k8soperatorsv1alpha1.ClusterSecret) ([]string, error) {
-	includeLabelSelector, err := metav1.LabelSelectorAsSelector(clusterSecret.Spec.Namespaces.Include.Selector)
+	includeNamespace, err := namespaceRuleMatcher(clusterSecret.Spec.Namespaces.Include)
 	if err != nil {
 		return nil, err
 	}
 
-	excludeLabelSelector, err := metav1.LabelSelectorAsSelector(clusterSecret.Spec.Namespaces.Exclude.Selector)
+	excludeNamespace, err := namespaceRuleMatcher(clusterSecret.Spec.Namespaces.Exclude)
 	if err != nil {
 		return nil, err
-	}
-
-	var includeRegexp, excludeRegexp *regexp.Regexp
-
-	if clusterSecret.Spec.Namespaces.Include.Regexp != nil {
-		includeRegexp, err = regexp.Compile(*clusterSecret.Spec.Namespaces.Include.Regexp)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if clusterSecret.Spec.Namespaces.Exclude.Regexp != nil {
-		excludeRegexp, err = regexp.Compile(*clusterSecret.Spec.Namespaces.Exclude.Regexp)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	includedNames := make(map[string]struct{})
-	for _, name := range clusterSecret.Spec.Namespaces.Include.Names {
-		includedNames[name] = struct{}{}
-	}
-
-	excludedNames := make(map[string]struct{})
-	for _, name := range clusterSecret.Spec.Namespaces.Exclude.Names {
-		excludedNames[name] = struct{}{}
 	}
 
 	namespaceList := &corev1.NamespaceList{}
@@ -234,40 +220,46 @@ func (r *ClusterSecretReconciler) getClusterSecretNamespaces(ctx context.Context
 	var namespaceNames []string
 
 	for _, namespace := range namespaceList.Items {
-		namespaceLabels := labels.Set(namespace.GetLabels())
-		namespaceName := namespace.GetName()
-
-		if !includeLabelSelector.Matches(namespaceLabels) || excludeLabelSelector.Matches(namespaceLabels) {
-			continue
+		if includeNamespace(namespace) && !excludeNamespace(namespace) {
+			namespaceNames = append(namespaceNames, namespace.GetName())
 		}
-
-		if (includeRegexp != nil && !includeRegexp.MatchString(namespaceName)) ||
-			(excludeRegexp != nil && excludeRegexp.MatchString(namespaceName)) {
-			continue
-		}
-
-		_, included := includedNames[namespaceName]
-		_, excluded := excludedNames[namespaceName]
-		if !included || excluded {
-			continue
-		}
-
-		namespaceNames = append(namespaceNames, namespaceName)
 	}
 
 	return namespaceNames, nil
 }
 
-func (r *ClusterSecretReconciler) updateSecret(clusterSecret *k8soperatorsv1alpha1.ClusterSecret, secret *corev1.Secret) error {
-	secret.Type = clusterSecret.Spec.Type
-	secret.Immutable = clusterSecret.Spec.Immutable
-	secret.Data = clusterSecret.Spec.Data
-
-	if metav1.GetControllerOf(secret) == nil {
-		return controllerutil.SetControllerReference(clusterSecret, secret, r.Scheme)
+func namespaceRuleMatcher(rule k8soperatorsv1alpha1.ClusterSecretNamespaceRule) (func(corev1.Namespace) bool, error) {
+	labelSelector, err := metav1.LabelSelectorAsSelector(rule.Selector)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	var regex *regexp.Regexp
+
+	if rule.Regexp != nil {
+		regex, err = regexp.Compile(*rule.Regexp)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return func(namespace corev1.Namespace) bool {
+		if labelSelector.Matches(labels.Set(namespace.GetLabels())) {
+			return true
+		}
+
+		if regex != nil && regex.MatchString(namespace.GetName()) {
+			return true
+		}
+
+		for _, name := range rule.Names {
+			if name == namespace.GetName() {
+				return true
+			}
+		}
+
+		return false
+	}, nil
 }
 
 func (r *ClusterSecretReconciler) watchNamespaces() handler.EventHandler {
