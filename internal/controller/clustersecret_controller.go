@@ -229,36 +229,38 @@ func (r *ClusterSecretReconciler) getClusterSecretNamespaces(ctx context.Context
 }
 
 func namespaceRuleMatcher(rule k8soperatorsv1alpha1.ClusterSecretNamespaceRule) (func(corev1.Namespace) bool, error) {
+	nameSet := make(map[string]struct{}, 0)
+
+	for _, name := range rule.Names {
+		nameSet[name] = struct{}{}
+	}
+
+	var nameRegexp *regexp.Regexp
+
+	if rule.Regexp != nil {
+		regex, err := regexp.Compile(*rule.Regexp)
+		if err != nil {
+			return nil, err
+		}
+		nameRegexp = regex
+	}
+
 	labelSelector, err := metav1.LabelSelectorAsSelector(rule.Selector)
 	if err != nil {
 		return nil, err
 	}
 
-	var regex *regexp.Regexp
-
-	if rule.Regexp != nil {
-		regex, err = regexp.Compile(*rule.Regexp)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return func(namespace corev1.Namespace) bool {
-		if labelSelector.Matches(labels.Set(namespace.GetLabels())) {
+		_, match := nameSet[namespace.GetName()]
+		if match {
 			return true
 		}
 
-		if regex != nil && regex.MatchString(namespace.GetName()) {
+		if nameRegexp != nil && nameRegexp.MatchString(namespace.GetName()) {
 			return true
 		}
 
-		for _, name := range rule.Names {
-			if name == namespace.GetName() {
-				return true
-			}
-		}
-
-		return false
+		return labelSelector.Matches(labels.Set(namespace.GetLabels()))
 	}, nil
 }
 
