@@ -20,7 +20,7 @@ type ClusterSecretNamespaces struct {
 
 type ClusterSecretNamespaceRule struct {
 	Selector *metav1.LabelSelector `json:"selector,omitempty" yaml:"selector,omitempty"`
-	Regexp   string                `json:"regexp,omitempty" yaml:"regexp,omitempty"`
+	Regexp   *string               `json:"regexp,omitempty" yaml:"regexp,omitempty"`
 	Names    []string              `json:"exclude,omitempty" yaml:"exclude,omitempty"`
 }
 

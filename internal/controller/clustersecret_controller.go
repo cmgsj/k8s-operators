@@ -193,24 +193,33 @@ func (r *ClusterSecretReconciler) getClusterSecretNamespaces(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
+
 	excludeLabelSelector, err := metav1.LabelSelectorAsSelector(clusterSecret.Spec.Namespaces.Exclude.Selector)
 	if err != nil {
 		return nil, err
 	}
 
-	includeRegexp, err := regexp.Compile(clusterSecret.Spec.Namespaces.Include.Regexp)
-	if err != nil {
-		return nil, err
+	var includeRegexp, excludeRegexp *regexp.Regexp
+
+	if clusterSecret.Spec.Namespaces.Include.Regexp != nil {
+		includeRegexp, err = regexp.Compile(*clusterSecret.Spec.Namespaces.Include.Regexp)
+		if err != nil {
+			return nil, err
+		}
 	}
-	excludeRegexp, err := regexp.Compile(clusterSecret.Spec.Namespaces.Exclude.Regexp)
-	if err != nil {
-		return nil, err
+
+	if clusterSecret.Spec.Namespaces.Exclude.Regexp != nil {
+		excludeRegexp, err = regexp.Compile(*clusterSecret.Spec.Namespaces.Exclude.Regexp)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	includedNames := make(map[string]struct{})
 	for _, name := range clusterSecret.Spec.Namespaces.Include.Names {
 		includedNames[name] = struct{}{}
 	}
+
 	excludedNames := make(map[string]struct{})
 	for _, name := range clusterSecret.Spec.Namespaces.Exclude.Names {
 		excludedNames[name] = struct{}{}
@@ -232,7 +241,8 @@ func (r *ClusterSecretReconciler) getClusterSecretNamespaces(ctx context.Context
 			continue
 		}
 
-		if !includeRegexp.MatchString(namespaceName) || excludeRegexp.MatchString(namespaceName) {
+		if (includeRegexp != nil && !includeRegexp.MatchString(namespaceName)) ||
+			(excludeRegexp != nil && excludeRegexp.MatchString(namespaceName)) {
 			continue
 		}
 

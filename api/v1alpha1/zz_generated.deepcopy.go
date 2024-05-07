@@ -92,6 +92,11 @@ func (in *ClusterSecretNamespaceRule) DeepCopyInto(out *ClusterSecretNamespaceRu
 		*out = new(v1.LabelSelector)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Regexp != nil {
+		in, out := &in.Regexp, &out.Regexp
+		*out = new(string)
+		**out = **in
+	}
 	if in.Names != nil {
 		in, out := &in.Names, &out.Names
 		*out = make([]string, len(*in))
