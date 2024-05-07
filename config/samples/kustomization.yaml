@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- cmg.io_v1alpha1_clustersecret.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

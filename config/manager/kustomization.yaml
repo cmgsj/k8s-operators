@@ -1,0 +1,7 @@
+resources:
+- manager.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+- name: controller
+  newName: cmg.io/sync-operator-1702012238
