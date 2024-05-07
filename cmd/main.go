@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	cmgiov1alpha1 "github.com/cmgsj/k8s-operators/api/v1alpha1"
+	k8soperatorsv1alpha1 "github.com/cmgsj/k8s-operators/api/v1alpha1"
 	"github.com/cmgsj/k8s-operators/internal/controller"
 	//+kubebuilder:scaffold:imports
 )
@@ -29,7 +29,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(cmgiov1alpha1.AddToScheme(scheme))
+	utilruntime.Must(k8soperatorsv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -56,7 +56,7 @@ func main() {
 		Metrics:                 metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress:  probeAddr,
 		LeaderElection:          enableLeaderElection,
-		LeaderElectionID:        "871c1fe7.cmg.io",
+		LeaderElectionID:        "871c1fe7.k8soperators.cmg.io",
 		LeaderElectionNamespace: leaderElectionNamespace,
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the

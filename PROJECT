@@ -2,7 +2,7 @@
 # This file is used to track the info used to scaffold your project
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
-domain: cmg.io
+domain: k8soperators.cmg.io
 layout:
   - go.kubebuilder.io/v4
 projectName: k8s-operators
@@ -12,8 +12,8 @@ resources:
       crdVersion: v1
       namespaced: true
     controller: true
-    domain: cmg.io
-    group: cmg.io
+    domain: k8soperators.cmg.io
+    group: k8soperators.cmg.io
     kind: ClusterSecret
     path: github.com/cmgsj/k8s-operators/api/v1alpha1
     version: v1alpha1

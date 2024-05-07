@@ -28,9 +28,9 @@ type ClusterSecretReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=cmg.io,resources=clustersecrets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=cmg.io,resources=clustersecrets/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=cmg.io,resources=clustersecrets/finalizers,verbs=update
+//+kubebuilder:rbac:groups=k8soperators.cmg.io,resources=clustersecrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=k8soperators.cmg.io,resources=clustersecrets/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=k8soperators.cmg.io,resources=clustersecrets/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 
