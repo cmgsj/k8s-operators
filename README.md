@@ -1,10 +1,6 @@
 # k8s-operators
 
-// TODO(user): Add simple overview of use/purpose
-
-## Description
-
-// TODO(user): An in-depth paragraph about your project and overview of use
+Collection of useful Kubernetes operators.
 
 ## Getting Started
 
