@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	k8soperatorsv1alpha1 "github.com/cmgsj/k8s-operators/api/v1alpha1"
 )
@@ -97,7 +98,7 @@ func validateClusterSecret(clusterSecret *k8soperatorsv1alpha1.ClusterSecret) er
 	var errs []error
 
 	switch clusterSecret.Spec.Type {
-	case "", // allow empty or omit ClusterSecret.Spec.Type
+	case "", // allow empty or omitted ClusterSecret.Spec.Type
 		corev1.SecretTypeOpaque,
 		corev1.SecretTypeServiceAccountToken,
 		corev1.SecretTypeDockercfg,
@@ -266,9 +267,9 @@ func namespaceRuleMatcher(rule k8soperatorsv1alpha1.ClusterSecretNamespaceRule) 
 
 func (r *ClusterSecretReconciler) watchNamespaces() handler.EventHandler {
 	return handler.Funcs{
-		CreateFunc: func(ctx context.Context, e event.CreateEvent, q workqueue.RateLimitingInterface) {
-			for _, req := range r.mapNamespaceToRequests(ctx, e.Object) {
-				q.Add(req)
+		CreateFunc: func(ctx context.Context, event event.TypedCreateEvent[client.Object], rateLimit workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			for _, request := range r.mapNamespaceToRequests(ctx, event.Object) {
+				rateLimit.Add(request)
 			}
 		},
 	}
