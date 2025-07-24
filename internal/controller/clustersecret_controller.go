@@ -1,3 +1,19 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package controller
 
 import (
@@ -5,9 +21,11 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,30 +48,28 @@ type ClusterSecretReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=k8soperators.cmg.io,resources=clustersecrets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=k8soperators.cmg.io,resources=clustersecrets/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=k8soperators.cmg.io,resources=clustersecrets/finalizers,verbs=update
-//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=k8s-operators.cmgsj.github.io.cmgsj.github.io,resources=clustersecrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=k8s-operators.cmgsj.github.io.cmgsj.github.io,resources=clustersecrets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=k8s-operators.cmgsj.github.io.cmgsj.github.io,resources=clustersecrets/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *ClusterSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&k8soperatorsv1alpha1.ClusterSecret{}).
-		Owns(&corev1.Secret{}).
-		Watches(&corev1.Namespace{}, r.watchNamespaces()).
-		Complete(r)
-}
-
-// Reconcile reconciles a ClusterSecret object.
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
 func (r *ClusterSecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	log.Info("reconciling object")
 
 	clusterSecret := &k8soperatorsv1alpha1.ClusterSecret{}
+
 	err := r.Get(ctx, req.NamespacedName, clusterSecret)
-	if client.IgnoreNotFound(err) != nil {
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("object not found")
+			return ctrl.Result{}, nil
+		}
+
 		log.Error(err, "failed to get object")
 		return ctrl.Result{}, err
 	}
@@ -80,6 +96,15 @@ func (r *ClusterSecretReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	log.Info("applied secrets")
 
 	clusterSecret.Status.Namespaces = namespaces
+
+	meta.SetStatusCondition(&clusterSecret.Status.Conditions, metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: clusterSecret.GetGeneration(),
+		LastTransitionTime: metav1.NewTime(time.Now()),
+		Reason:             "ClusterSecretReady",
+		Message:            "ClusterSecret is ready",
+	})
 
 	err = r.Status().Update(ctx, clusterSecret)
 	if err != nil {
@@ -129,7 +154,7 @@ func validateClusterSecret(clusterSecret *k8soperatorsv1alpha1.ClusterSecret) er
 }
 
 func (r *ClusterSecretReconciler) applySecrets(ctx context.Context, clusterSecret *k8soperatorsv1alpha1.ClusterSecret) ([]string, error) {
-	namespaces, err := r.getClusterSecretNamespaces(ctx, clusterSecret)
+	namespaces, err := r.clusterSecretNamespaces(ctx, clusterSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -141,10 +166,11 @@ func (r *ClusterSecretReconciler) applySecrets(ctx context.Context, clusterSecre
 				Name:      clusterSecret.Name,
 			},
 		}
+
 		err = r.Get(ctx, client.ObjectKeyFromObject(secret), secret)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				err = r.updateSecret(clusterSecret, secret)
+				err = r.setSecret(clusterSecret, secret)
 				if err != nil {
 					return nil, err
 				}
@@ -163,7 +189,7 @@ func (r *ClusterSecretReconciler) applySecrets(ctx context.Context, clusterSecre
 					return nil, err
 				}
 
-				err = r.updateSecret(clusterSecret, secret)
+				err = r.setSecret(clusterSecret, secret)
 				if err != nil {
 					return nil, err
 				}
@@ -173,7 +199,7 @@ func (r *ClusterSecretReconciler) applySecrets(ctx context.Context, clusterSecre
 					return nil, err
 				}
 			} else {
-				err = r.updateSecret(clusterSecret, secret)
+				err = r.setSecret(clusterSecret, secret)
 				if err != nil {
 					return nil, err
 				}
@@ -189,7 +215,7 @@ func (r *ClusterSecretReconciler) applySecrets(ctx context.Context, clusterSecre
 	return namespaces, nil
 }
 
-func (r *ClusterSecretReconciler) updateSecret(clusterSecret *k8soperatorsv1alpha1.ClusterSecret, secret *corev1.Secret) error {
+func (r *ClusterSecretReconciler) setSecret(clusterSecret *k8soperatorsv1alpha1.ClusterSecret, secret *corev1.Secret) error {
 	secret.Type = clusterSecret.Spec.Type
 	secret.Immutable = clusterSecret.Spec.Immutable
 	secret.Data = clusterSecret.Spec.Data
@@ -201,18 +227,19 @@ func (r *ClusterSecretReconciler) updateSecret(clusterSecret *k8soperatorsv1alph
 	return nil
 }
 
-func (r *ClusterSecretReconciler) getClusterSecretNamespaces(ctx context.Context, clusterSecret *k8soperatorsv1alpha1.ClusterSecret) ([]string, error) {
-	includeNamespace, err := namespaceRuleMatcher(clusterSecret.Spec.Namespaces.Include)
+func (r *ClusterSecretReconciler) clusterSecretNamespaces(ctx context.Context, clusterSecret *k8soperatorsv1alpha1.ClusterSecret) ([]string, error) {
+	includeNamespace, err := clusterSecretNamespaceRuleMatcher(clusterSecret.Spec.Namespaces.Include)
 	if err != nil {
 		return nil, err
 	}
 
-	excludeNamespace, err := namespaceRuleMatcher(clusterSecret.Spec.Namespaces.Exclude)
+	excludeNamespace, err := clusterSecretNamespaceRuleMatcher(clusterSecret.Spec.Namespaces.Exclude)
 	if err != nil {
 		return nil, err
 	}
 
 	namespaceList := &corev1.NamespaceList{}
+
 	err = r.List(ctx, namespaceList)
 	if err != nil {
 		return nil, err
@@ -229,7 +256,7 @@ func (r *ClusterSecretReconciler) getClusterSecretNamespaces(ctx context.Context
 	return namespaceNames, nil
 }
 
-func namespaceRuleMatcher(rule k8soperatorsv1alpha1.ClusterSecretNamespaceRule) (func(corev1.Namespace) bool, error) {
+func clusterSecretNamespaceRuleMatcher(rule k8soperatorsv1alpha1.ClusterSecretNamespaceRule) (func(corev1.Namespace) bool, error) {
 	nameSet := make(map[string]struct{}, 0)
 
 	for _, name := range rule.Names {
@@ -265,23 +292,34 @@ func namespaceRuleMatcher(rule k8soperatorsv1alpha1.ClusterSecretNamespaceRule) 
 	}, nil
 }
 
-func (r *ClusterSecretReconciler) watchNamespaces() handler.EventHandler {
+func (r *ClusterSecretReconciler) namespaceWatcher() handler.EventHandler {
 	return handler.Funcs{
-		CreateFunc: func(ctx context.Context, event event.TypedCreateEvent[client.Object], rateLimit workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			for _, request := range r.mapNamespaceToRequests(ctx, event.Object) {
-				rateLimit.Add(request)
+		CreateFunc: func(ctx context.Context, event event.TypedCreateEvent[client.Object], queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			_, isNamespace := event.Object.(*corev1.Namespace)
+			if !isNamespace {
+				return
+			}
+
+			for _, request := range r.listClusterSecretRequests(ctx) {
+				queue.Add(request)
+			}
+		},
+		DeleteFunc: func(ctx context.Context, event event.TypedDeleteEvent[client.Object], queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			_, isNamespace := event.Object.(*corev1.Namespace)
+			if !isNamespace {
+				return
+			}
+
+			for _, request := range r.listClusterSecretRequests(ctx) {
+				queue.Add(request)
 			}
 		},
 	}
 }
 
-func (r *ClusterSecretReconciler) mapNamespaceToRequests(ctx context.Context, object client.Object) []ctrl.Request {
-	_, isNamespace := object.(*corev1.Namespace)
-	if !isNamespace {
-		return nil
-	}
-
+func (r *ClusterSecretReconciler) listClusterSecretRequests(ctx context.Context) []ctrl.Request {
 	clusterSecretList := &k8soperatorsv1alpha1.ClusterSecretList{}
+
 	err := r.List(ctx, clusterSecretList)
 	if err != nil {
 		return nil
@@ -299,4 +337,14 @@ func (r *ClusterSecretReconciler) mapNamespaceToRequests(ctx context.Context, ob
 	}
 
 	return requests
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *ClusterSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&k8soperatorsv1alpha1.ClusterSecret{}).
+		Owns(&corev1.Secret{}).
+		Watches(&corev1.Namespace{}, r.namespaceWatcher()).
+		Named("clustersecret").
+		Complete(r)
 }

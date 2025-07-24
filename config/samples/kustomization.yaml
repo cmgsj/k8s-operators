@@ -1,4 +1,4 @@
 ## Append samples of your project ##
 resources:
-  - k8soperators.cmg.io_v1alpha1_clustersecret.yaml
-#+kubebuilder:scaffold:manifestskustomizesamples
+- k8s-operators.cmgsj.github.io_v1alpha1_clustersecret.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

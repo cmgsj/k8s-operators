@@ -25,7 +25,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - k8soperators.cmg.io
+  - k8s-operators.cmgsj.github.io.cmgsj.github.io
   resources:
   - clustersecrets
   verbs:
@@ -37,13 +37,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - k8soperators.cmg.io
+  - k8s-operators.cmgsj.github.io.cmgsj.github.io
   resources:
   - clustersecrets/finalizers
   verbs:
   - update
 - apiGroups:
-  - k8soperators.cmg.io
+  - k8s-operators.cmgsj.github.io.cmgsj.github.io
   resources:
   - clustersecrets/status
   verbs:
